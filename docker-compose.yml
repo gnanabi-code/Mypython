@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  file-transfer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: azure-file-transfer
+    environment:
+      - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING}
+      - AZURE_CONTAINER_NAME=${AZURE_CONTAINER_NAME}
+      - LOG_LEVEL=INFO
+    volumes:
+      # Mount local directories for file transfer
+      - ./uploads:/app/uploads:ro
+      - ./downloads:/app/downloads:rw
+      - ./logs:/app/logs:rw
+    # Uncomment to run specific command
+    # command: upload-dir --local-path /app/uploads --blob-prefix photos
+    stdin_open: true
+    tty: true
