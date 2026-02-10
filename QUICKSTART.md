@@ -1,17 +1,17 @@
 ## Project Ready! 🚀
 
-Your Azure Blob Storage File Transfer application is now complete and ready to run.
+Your Oracle Object Storage File Transfer application is now complete and ready to run.
 
 ### What You Have
 
-A complete, production-ready Python application with Docker support for transferring files to Azure Blob Storage. 
+A complete, production-ready Python application with Docker support for transferring files to Oracle Cloud Infrastructure Object Storage.
 
 ### Files in Your Project
 
 ```
 PhotoSync/
-├── app.py                    # Main application (256+ lines)
-├── requirements.txt          # Dependencies (azure-storage-blob, python-dotenv)
+├── app.py                    # Main application (300+ lines)
+├── requirements.txt          # Dependencies (oci, python-dotenv)
 ├── Dockerfile                # Container configuration
 ├── docker-compose.yml        # Multi-container setup
 ├── .env                      # Configuration (created, needs credentials)
@@ -56,16 +56,27 @@ mkdir uploads, downloads, logs
 python app.py --help
 ```
 
-### Getting Azure Credentials
+### Getting Oracle Cloud Credentials
 
-1. Go to [Azure Portal](https://portal.azure.com)
-2. Find your **Storage Account**
-3. Navigate to **Access Keys** or **Connection string**
-4. Copy the connection string
-5. Edit `.env` file:
+1. Go to [Oracle Cloud Console](https://www.oracle.com/cloud/sign-in/)
+2. Click your profile icon (top-right)
+3. Click **User Settings**
+4. Scroll to **API Keys** and click **Add API Key**
+5. Download your private key and save to `~/.oci/`
+6. Create `~/.oci/config` with your credentials:
+   ```ini
+   [DEFAULT]
+   user=ocid1.user.oc1.xxxxxxxxxxxxxxxx
+   fingerprint=xx:xx:xx:xx:xx:xx:xx:xx
+   key_file=~/.oci/your_private_key.pem
+   tenancy=ocid1.tenancy.oc1.xxxxxxxxxxxxxxxx
+   region=us-phoenix-1
    ```
-   AZURE_STORAGE_CONNECTION_STRING=<paste_here>
-   AZURE_CONTAINER_NAME=my-container
+7. Find your **Namespace** (Object Storage > Buckets page)
+8. Edit `.env`:
+   ```
+   OCI_NAMESPACE=your_namespace
+   OCI_BUCKET_NAME=your_bucket_name
    ```
 
 ### Run Examples
@@ -74,17 +85,17 @@ python app.py --help
 # Show help
 python app.py --help
 
-# List files in Azure
+# List objects in bucket
 python app.py list
 
 # Upload a single file
-python app.py upload-file --local-path .\uploads\photo.jpg --blob-name photos/photo.jpg
+python app.py upload-file --local-path .\uploads\photo.jpg --object-name photos/photo.jpg
 
 # Upload entire directory (recommended)
-python app.py upload-dir --local-path .\uploads --blob-prefix photos/2024
+python app.py upload-dir --local-path .\uploads --object-prefix photos/2024
 
 # Download a file
-python app.py download --blob-name photos/photo.jpg --local-path .\downloads\photo.jpg
+python app.py download --object-name photos/photo.jpg --local-path .\downloads\photo.jpg
 ```
 
 ### Using Docker (Alternative)
@@ -93,7 +104,7 @@ If you prefer Docker (skip if not installed):
 
 ```powershell
 # Build image
-docker build -t azure-file-transfer .
+docker build -t oci-file-transfer .
 
 # Run with compose
 docker-compose run --rm file-transfer upload-dir --local-path /app/uploads

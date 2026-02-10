@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Azure Blob Storage File Transfer Application
-Transfers files from local directory to Azure Blob Storage
+Oracle Object Storage File Transfer Application
+Transfers files from local directory to Oracle Cloud Infrastructure Object Storage
 """
 
 import os
@@ -9,8 +9,8 @@ import sys
 import logging
 from pathlib import Path
 from datetime import datetime
-from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
-from azure.core.exceptions import AzureError
+import oci
+from oci.object_storage import ObjectStorageClient
 import argparse
 
 # Configure logging
@@ -25,50 +25,46 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class AzureBlobUploader:
-    """Handles file uploads to Azure Blob Storage"""
+class OracleObjectStorageUploader:
+    """Handles file uploads to Oracle Object Storage"""
     
-    def __init__(self, connection_string: str, container_name: str):
+    def __init__(self, config: dict, namespace: str, bucket_name: str):
         """
-        Initialize Azure Blob Storage uploader
+        Initialize Oracle Object Storage uploader
         
         Args:
-            connection_string: Azure Storage connection string
-            container_name: Name of the blob container
+            config: OCI configuration dictionary (from ~/.oci/config file)
+            namespace: Oracle Cloud Object Storage namespace
+            bucket_name: Name of the bucket
         """
         try:
-            self.blob_service_client = BlobServiceClient.from_connection_string(
-                connection_string
+            # Initialize OCI config
+            oci_config = oci.config.from_file(
+                file_location=config.get('config_file', os.path.expanduser('~/.oci/config')),
+                profile_name=config.get('profile', 'DEFAULT')
             )
-            self.container_name = container_name
-            self.container_client = self.blob_service_client.get_container_client(
-                container_name
+            
+            self.object_storage_client = ObjectStorageClient(oci_config)
+            self.namespace = namespace
+            self.bucket_name = bucket_name
+            
+            # Verify connection by accessing bucket properties
+            self.object_storage_client.get_bucket(
+                namespace_name=namespace,
+                bucket_name=bucket_name
             )
-            logger.info(f"Connected to Azure Storage container: {container_name}")
-        except AzureError as e:
-            logger.error(f"Failed to connect to Azure Storage: {e}")
+            logger.info(f"Connected to Oracle Object Storage bucket: {bucket_name} in namespace: {namespace}")
+        except oci.exceptions.OciError as e:
+            logger.error(f"Failed to connect to Oracle Object Storage: {e}")
             raise
     
-    def create_container_if_not_exists(self):
-        """Create container if it doesn't already exist"""
-        try:
-            self.container_client.get_container_properties()
-            logger.info(f"Container '{self.container_name}' already exists")
-        except AzureError:
-            try:
-                self.blob_service_client.create_container(self.container_name)
-                logger.info(f"Created container: {self.container_name}")
-            except AzureError as e:
-                logger.error(f"Failed to create container: {e}")
-                raise
-    
-    def upload_file(self, local_file_path: str, blob_name: str = None):
+    def upload_file(self, local_file_path: str, object_name: str = None):
         """
-        Upload a single file to Azure Blob Storage
+        Upload a single file to Oracle Object Storage
         
         Args:
             local_file_path: Path to local file
-            blob_name: Name for the blob (optional, defaults to filename)
+            object_name: Name for the object (optional, defaults to filename)
         
         Returns:
             bool: True if successful, False otherwise
@@ -83,29 +79,30 @@ class AzureBlobUploader:
             logger.error(f"Path is not a file: {local_file_path}")
             return False
         
-        blob_name = blob_name or local_path.name
+        object_name = object_name or local_path.name
         
         try:
-            with open(local_path, 'rb') as data:
-                self.container_client.upload_blob(
-                    name=blob_name,
-                    data=data,
-                    overwrite=True
+            with open(local_path, 'rb') as file_content:
+                self.object_storage_client.put_object(
+                    namespace_name=self.namespace,
+                    bucket_name=self.bucket_name,
+                    object_name=object_name,
+                    put_object_body=file_content
                 )
             file_size = local_path.stat().st_size
-            logger.info(f"Successfully uploaded: {local_file_path} -> {blob_name} ({file_size} bytes)")
+            logger.info(f"Successfully uploaded: {local_file_path} -> {object_name} ({file_size} bytes)")
             return True
-        except AzureError as e:
+        except oci.exceptions.OciError as e:
             logger.error(f"Failed to upload {local_file_path}: {e}")
             return False
     
-    def upload_directory(self, local_dir_path: str, blob_prefix: str = ""):
+    def upload_directory(self, local_dir_path: str, object_prefix: str = ""):
         """
-        Upload all files from a directory to Azure Blob Storage
+        Upload all files from a directory to Oracle Object Storage
         
         Args:
             local_dir_path: Path to local directory
-            blob_prefix: Prefix for blobs (creates folder-like structure)
+            object_prefix: Prefix for objects (creates folder-like structure)
         
         Returns:
             dict: Statistics about the upload (success_count, failed_count, total_size)
@@ -132,16 +129,16 @@ class AzureBlobUploader:
         
         for file_path in files:
             if file_path.is_file():
-                # Create blob name with directory structure
+                # Create object name with directory structure
                 relative_path = file_path.relative_to(local_dir)
-                blob_name = f"{blob_prefix}/{relative_path}".lstrip('/')
+                object_name = f"{object_prefix}/{relative_path}".lstrip('/').replace('\\', '/')
                 
-                if self.upload_file(str(file_path), blob_name):
+                if self.upload_file(str(file_path), object_name):
                     stats['success_count'] += 1
                     stats['total_size'] += file_path.stat().st_size
                     stats['files'].append({
                         'local_path': str(file_path),
-                        'blob_name': blob_name,
+                        'object_name': object_name,
                         'size': file_path.stat().st_size
                     })
                 else:
@@ -149,55 +146,59 @@ class AzureBlobUploader:
         
         return stats
     
-    def list_blobs(self, blob_prefix: str = ""):
+    def list_objects(self, object_prefix: str = ""):
         """
-        List all blobs in the container
+        List all objects in the bucket
         
         Args:
-            blob_prefix: Optional prefix to filter blobs
+            object_prefix: Optional prefix to filter objects
         """
         try:
-            blobs = self.container_client.list_blobs(name_starts_with=blob_prefix)
-            logger.info(f"Blobs in container '{self.container_name}':")
-            for blob in blobs:
-                logger.info(f"  - {blob.name} ({blob.size} bytes)")
-        except AzureError as e:
-            logger.error(f"Failed to list blobs: {e}")
+            objects = self.object_storage_client.list_objects(
+                namespace_name=self.namespace,
+                bucket_name=self.bucket_name,
+                prefix=object_prefix if object_prefix else None
+            )
+            logger.info(f"Objects in bucket '{self.bucket_name}':")
+            for obj in objects.data.objects:
+                logger.info(f"  - {obj.name} ({obj.size} bytes)")
+        except oci.exceptions.OciError as e:
+            logger.error(f"Failed to list objects: {e}")
     
-    def download_file(self, blob_name: str, local_file_path: str):
+    def download_file(self, object_name: str, local_file_path: str):
         """
-        Download a file from Azure Blob Storage
+        Download a file from Oracle Object Storage
         
         Args:
-            blob_name: Name of the blob
+            object_name: Name of the object
             local_file_path: Path to save the file locally
         
         Returns:
             bool: True if successful, False otherwise
         """
         try:
-            blob_client = self.blob_service_client.get_blob_client(
-                container=self.container_name,
-                blob=blob_name
+            response = self.object_storage_client.get_object(
+                namespace_name=self.namespace,
+                bucket_name=self.bucket_name,
+                object_name=object_name
             )
-            download_stream = blob_client.download_blob()
             
             Path(local_file_path).parent.mkdir(parents=True, exist_ok=True)
             
             with open(local_file_path, 'wb') as file:
-                file.write(download_stream.readall())
+                file.write(response.data.content)
             
-            logger.info(f"Successfully downloaded: {blob_name} -> {local_file_path}")
+            logger.info(f"Successfully downloaded: {object_name} -> {local_file_path}")
             return True
-        except AzureError as e:
-            logger.error(f"Failed to download {blob_name}: {e}")
+        except oci.exceptions.OciError as e:
+            logger.error(f"Failed to download {object_name}: {e}")
             return False
 
 
 def main():
     """Main application entry point"""
     parser = argparse.ArgumentParser(
-        description='Transfer files to/from Azure Blob Storage'
+        description='Transfer files to/from Oracle Object Storage'
     )
     parser.add_argument(
         'action',
@@ -205,70 +206,85 @@ def main():
         help='Action to perform'
     )
     parser.add_argument(
-        '--connection-string',
+        '--config-file',
         required=False,
-        help='Azure Storage connection string'
+        help='Path to OCI config file (default: ~/.oci/config)'
     )
     parser.add_argument(
-        '--container',
+        '--profile',
         required=False,
-        help='Azure Blob Storage container name'
+        default='DEFAULT',
+        help='OCI config profile name (default: DEFAULT)'
+    )
+    parser.add_argument(
+        '--namespace',
+        required=False,
+        help='Oracle Object Storage namespace'
+    )
+    parser.add_argument(
+        '--bucket',
+        required=False,
+        help='Oracle Object Storage bucket name'
     )
     parser.add_argument(
         '--local-path',
         help='Local file or directory path'
     )
     parser.add_argument(
-        '--blob-name',
-        help='Blob name in storage'
+        '--object-name',
+        help='Object name in storage'
     )
     parser.add_argument(
-        '--blob-prefix',
+        '--object-prefix',
         default='',
-        help='Prefix for blobs (for directory uploads)'
+        help='Prefix for objects (for directory uploads)'
     )
     
     args = parser.parse_args()
     
-    # Get connection string from argument or environment variable
-    connection_string = args.connection_string or os.getenv('AZURE_STORAGE_CONNECTION_STRING')
-    if not connection_string:
-        logger.error("Azure Storage connection string not provided")
+    # Get namespace from argument or environment variable
+    namespace = args.namespace or os.getenv('OCI_NAMESPACE')
+    if not namespace:
+        logger.error("Oracle Object Storage namespace not provided")
         sys.exit(1)
     
-    # Get container name from argument or environment variable
-    container_name = args.container or os.getenv('AZURE_CONTAINER_NAME')
-    if not container_name:
-        logger.error("Azure Container name not provided")
+    # Get bucket name from argument or environment variable
+    bucket_name = args.bucket or os.getenv('OCI_BUCKET_NAME')
+    if not bucket_name:
+        logger.error("Oracle Object Storage bucket name not provided")
         sys.exit(1)
     
     try:
-        uploader = AzureBlobUploader(connection_string, container_name)
-        uploader.create_container_if_not_exists()
+        config = {
+            'config_file': args.config_file or os.path.expanduser('~/.oci/config'),
+            'profile': args.profile
+        }
+        
+        uploader = OracleObjectStorageUploader(config, namespace, bucket_name)
         
         if args.action == 'upload-file':
             if not args.local_path:
                 logger.error("--local-path is required for upload-file action")
                 sys.exit(1)
-            success = uploader.upload_file(args.local_path, args.blob_name)
+            success = uploader.upload_file(args.local_path, args.object_name)
             sys.exit(0 if success else 1)
         
         elif args.action == 'upload-dir':
             if not args.local_path:
                 logger.error("--local-path is required for upload-dir action")
                 sys.exit(1)
-            stats = uploader.upload_directory(args.local_path, args.blob_prefix)
+            stats = uploader.upload_directory(args.local_path, args.object_prefix)
             logger.info(f"Upload complete: {stats['success_count']} succeeded, {stats['failed_count']} failed, {stats['total_size']} bytes total")
             sys.exit(0 if stats['failed_count'] == 0 else 1)
         
         elif args.action == 'list':
-            uploader.list_blobs(args.blob_prefix)
+            uploader.list_objects(args.object_prefix)
         
         elif args.action == 'download':
-            if not args.blob_name or not args.local_path:
-                logger.error("--blob-name and --local-path are required for download action")
+            if not args.object_name or not args.local_path:
+                logger.error("--object-name and --local-path are required for download action")
                 sys.exit(1)
-            success = uploader.download_file(args.blob_name, args.local_path)
+            success = uploader.download_file(args.object_name, args.local_path)
             sys.exit(0 if success else 1)
     
     except Exception as e:

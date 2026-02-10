@@ -1,13 +1,13 @@
-# Azure Blob Storage File Transfer App
+# Oracle Object Storage File Transfer App
 
-A Python application to transfer files from local storage to Azure Blob Storage, with Docker support for easy deployment.
+A Python application to transfer files from local storage to Oracle Cloud Infrastructure Object Storage, with Docker support for easy deployment.
 
 ## Features
 
-- ✅ Upload individual files to Azure Blob Storage
+- ✅ Upload individual files to Oracle Object Storage
 - ✅ Upload entire directories recursively
-- ✅ Download files from Azure Blob Storage
-- ✅ List blobs in containers
+- ✅ Download files from Oracle Object Storage
+- ✅ List objects in buckets
 - ✅ Docker containerization for easy deployment
 - ✅ Comprehensive logging
 - ✅ Error handling and retry logic
@@ -17,19 +17,43 @@ A Python application to transfer files from local storage to Azure Blob Storage,
 
 - Python 3.11+ (for local development)
 - Docker & Docker Compose (for containerized deployment)
-- Azure Storage Account with connection string
-- Azure Blob Storage container
+- Oracle Cloud Infrastructure account with Object Storage bucket
+- OCI credentials configured locally (~/.oci/config)
 
 ## Setup
 
-### 1. Get Azure Storage Connection String
+### 1. Get Oracle Cloud Credentials
 
-1. Go to [Azure Portal](https://portal.azure.com)
-2. Navigate to your Storage Account
-3. Go to **Access keys** or **Connection string**
-4. Copy your connection string
+1. Log in to [Oracle Cloud Console](https://www.oracle.com/cloud/sign-in/)
+2. Navigate to **Users** in the top-right menu
+3. Click your username and go to **User Settings**
+4. Scroll down to **API Keys** and click **Add API Key**
+5. A private key will be generated - download and save it to `~/.oci/`
+6. Copy your **Namespace** from Object Storage service page
+7. Create your Object Storage bucket in Oracle Cloud Console
 
-### 2. Clone and Configure
+### 2. Configure OCI Credentials Locally
+
+```bash
+# Create OCI config directory
+mkdir -p ~/.oci
+
+# Create config file and add your credentials
+cat > ~/.oci/config << EOF
+[DEFAULT]
+user=ocid1.user.oc1...
+fingerprint=your_fingerprint
+key_file=~/.oci/your_private_key.pem
+tenancy=ocid1.tenancy.oc1...
+region=us-phoenix-1
+EOF
+
+# Set proper permissions
+chmod 600 ~/.oci/config
+chmod 600 ~/.oci/your_private_key.pem
+```
+
+### 3. Clone and Configure the App
 
 ```bash
 # Clone/download the project
@@ -38,9 +62,9 @@ cd PhotoSync
 # Create .env file from template
 cp .env.example .env
 
-# Edit .env with your Azure credentials
-# AZURE_STORAGE_CONNECTION_STRING=your_connection_string
-# AZURE_CONTAINER_NAME=your_container_name
+# Edit .env with your Oracle credentials
+# OCI_NAMESPACE=your_namespace
+# OCI_BUCKET_NAME=your_bucket_name
 ```
 
 ## Usage
@@ -49,40 +73,41 @@ cp .env.example .env
 
 #### Upload a Directory
 ```bash
-docker-compose run --rm file-transfer upload-dir --local-path /app/uploads --blob-prefix photos
+docker-compose run --rm file-transfer upload-dir --local-path /app/uploads --object-prefix photos
 ```
 
 #### Upload a Single File
 ```bash
-docker-compose run --rm file-transfer upload-file --local-path /app/uploads/image.jpg --blob-name photos/image.jpg
+docker-compose run --rm file-transfer upload-file --local-path /app/uploads/image.jpg --object-name photos/image.jpg
 ```
 
-#### List Blobs
+#### List Objects
 ```bash
-docker-compose run --rm file-transfer list --blob-prefix photos
+docker-compose run --rm file-transfer list --object-prefix photos
 ```
 
 #### Download a File
 ```bash
-docker-compose run --rm file-transfer download --blob-name photos/image.jpg --local-path /app/downloads/image.jpg
+docker-compose run --rm file-transfer download --object-name photos/image.jpg --local-path /app/downloads/image.jpg
 ```
 
 ### Option 2: Using Docker Directly
 
 #### Build the Image
 ```bash
-docker build -t azure-file-transfer .
+docker build -t oci-file-transfer .
 ```
 
 #### Run Container
 ```bash
 docker run --rm \
-  -e AZURE_STORAGE_CONNECTION_STRING="your_connection_string" \
-  -e AZURE_CONTAINER_NAME="your_container" \
+  -e OCI_NAMESPACE="your_namespace" \
+  -e OCI_BUCKET_NAME="your_bucket_name" \
+  -v ~/.oci:/root/.oci:ro \
   -v $(pwd)/uploads:/app/uploads:ro \
   -v $(pwd)/downloads:/app/downloads:rw \
   -v $(pwd)/logs:/app/logs:rw \
-  azure-file-transfer upload-dir --local-path /app/uploads
+  oci-file-transfer upload-dir --local-path /app/uploads
 ```
 
 ### Option 3: Local Python Execution
@@ -95,20 +120,20 @@ pip install -r requirements.txt
 #### Run Application
 ```bash
 # Set environment variables
-export AZURE_STORAGE_CONNECTION_STRING="your_connection_string"
-export AZURE_CONTAINER_NAME="your_container"
+export OCI_NAMESPACE="your_namespace"
+export OCI_BUCKET_NAME="your_bucket_name"
 
 # Upload directory
-python app.py upload-dir --local-path ./uploads --blob-prefix photos
+python app.py upload-dir --local-path ./uploads --object-prefix photos
 
 # Upload single file
-python app.py upload-file --local-path ./uploads/image.jpg --blob-name photos/image.jpg
+python app.py upload-file --local-path ./uploads/image.jpg --object-name photos/image.jpg
 
-# List blobs
-python app.py list --blob-prefix photos
+# List objects
+python app.py list --object-prefix photos
 
 # Download file
-python app.py download --blob-name photos/image.jpg --local-path ./downloads/image.jpg
+python app.py download --object-name photos/image.jpg --local-path ./downloads/image.jpg
 ```
 
 ## Command Reference
@@ -117,13 +142,13 @@ python app.py download --blob-name photos/image.jpg --local-path ./downloads/ima
 
 - **upload-file**: Upload a single file
 - **upload-dir**: Upload entire directory
-- **list**: List all blobs in container
+- **list**: List all objects in bucket
 - **download**: Download a file
 
 ### Arguments
 
-- `--connection-string`: Azure Storage connection string (optional if env var set)
-- `--container`: Azure container name (optional if env var set)
+- `--namespace`: Oracle Object Storage namespace (optional if env var set)
+- `--bucket`: Oracle Object Storage bucket name (optional if env var set)
 - `--local-path`: Path to local file or directory
 - `--blob-name`: Name/path for blob in storage
 - `--blob-prefix`: Prefix for organizing blobs (default: empty)

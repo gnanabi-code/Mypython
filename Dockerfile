@@ -25,6 +25,9 @@ RUN mkdir -p /app/uploads /app/logs /app/downloads
 ENV PYTHONUNBUFFERED=1
 ENV LOG_LEVEL=INFO
 
+# Note: Mount ~/.oci to /root/.oci when running the container
+# Example: docker run -v ~/.oci:/root/.oci ...
+
 # Run the application
 ENTRYPOINT ["python", "app.py"]
 CMD ["--help"]

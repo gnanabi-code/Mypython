@@ -22,15 +22,28 @@ pip --version
 - Install and enable WSL 2 backend
 - Verify: `docker --version`
 
-### Step 3: Set Up Azure Credentials
+### Step 3: Set Up Oracle Cloud Credentials
 
-1. Go to Azure Portal: https://portal.azure.com
-2. Find your Storage Account
-3. Get your connection string from "Access keys"
-4. Edit `.env` file:
+1. Go to Oracle Cloud Console: https://www.oracle.com/cloud/sign-in/
+2. Navigate to your user settings (top-right menu)
+3. Go to **API Keys** and generate a new key
+4. Download the private key file and save to `~/.oci/`
+5. Create `~/.oci/config` file with your credentials:
+
+```ini
+[DEFAULT]
+user=ocid1.user.oc1.xxxxxxxx
+fingerprint=ab:cd:ef:12:34:56:78:90:ab:cd:ef:12:34:56:78:90
+key_file=~/.oci/your_private_key.pem
+tenancy=ocid1.tenancy.oc1.xxxxxxxx
+region=us-phoenix-1
 ```
-AZURE_STORAGE_CONNECTION_STRING=<your_connection_string>
-AZURE_CONTAINER_NAME=<your_container_name>
+
+6. Get your **Namespace** from Oracle Cloud Console (Object Storage > Buckets > your namespace)
+7. Edit `.env` file:
+```
+OCI_NAMESPACE=your_namespace_here
+OCI_BUCKET_NAME=your_bucket_name_here
 ```
 
 ## Running the Application
@@ -52,25 +65,26 @@ pip install -r requirements.txt
 python app.py --help
 
 # Example: Upload directory
-python app.py upload-dir --local-path ./uploads --blob-prefix photos/2024
+python app.py upload-dir --local-path ./uploads --object-prefix photos/2024
 
 # Example: List files
-python app.py list --blob-prefix photos
+python app.py list --object-prefix photos
 ```
 
 ### Option B: Docker (Recommended for production)
 
 ```powershell
 # Build image
-docker build -t azure-file-transfer .
+docker build -t oci-file-transfer .
 
 # Run container
 docker run --rm `
-  -e AZURE_STORAGE_CONNECTION_STRING="$env:AZURE_CONNECTION_STRING" `
-  -e AZURE_CONTAINER_NAME="my-container" `
+  -e OCI_NAMESPACE="your_namespace" `
+  -e OCI_BUCKET_NAME="your_bucket" `
+  -v "$env:USERPROFILE\.oci:/root/.oci:ro" `
   -v "$(pwd)/uploads:/app/uploads:ro" `
   -v "$(pwd)/logs:/app/logs:rw" `
-  azure-file-transfer upload-dir --local-path /app/uploads
+  oci-file-transfer upload-dir --local-path /app/uploads
 ```
 
 ### Option C: Docker Compose (Easiest)
@@ -90,13 +104,14 @@ docker-compose run --rm file-transfer upload-dir --local-path /app/uploads
 python app.py --help
 
 # Upload single file
-python app.py upload-file --local-path "./uploads/photo.jpg" --blob-name "images/photo.jpg"
+python app.py upload-file --local-path "./uploads/photo.jpg" --object-name "images/photo.jpg"
 
 # Upload entire directory
-python app.py upload-dir --local-path "./uploads" --blob-prefix "photos/2024/february"
+python app.py upload-dir --local-path "./uploads" --object-prefix "photos/2024/february"
 
 # List files
-python app.py list --blob-prefix "photos"
+python app.py list --object-prefix "photos"
+
 
 # Download file
 python app.py download --blob-name "photos/image.jpg" --local-path "./downloads/image.jpg"

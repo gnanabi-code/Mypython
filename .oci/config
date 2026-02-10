@@ -1,0 +1,6 @@
+[DEFAULT]
+user=ocid1.user.oc1..aaaaaaaa2oysyvw7be5h52jpc3bt4qqvnzdmjzbk7iinqntvdfuznksw6s3q
+fingerprint=07:4e:f1:bd:77:06:55:08:11:bb:de:c2:ee:19:da:d7
+tenancy=ocid1.tenancy.oc1..aaaaaaaazlgmtoa7cw46ctowhdhr6c5lgtozaup54nudqd4jgbog3dh2vdha
+region=ap-hyderabad-1
+key_file=cijai4u@gmail.com-2026-02-09T16_40_45.923Z # TODO

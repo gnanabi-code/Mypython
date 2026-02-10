@@ -5,17 +5,19 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: azure-file-transfer
+    container_name: oci-file-transfer
     environment:
-      - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING}
-      - AZURE_CONTAINER_NAME=${AZURE_CONTAINER_NAME}
+      - OCI_NAMESPACE=${OCI_NAMESPACE}
+      - OCI_BUCKET_NAME=${OCI_BUCKET_NAME}
       - LOG_LEVEL=INFO
     volumes:
       # Mount local directories for file transfer
       - ./uploads:/app/uploads:ro
       - ./downloads:/app/downloads:rw
       - ./logs:/app/logs:rw
+      # Mount OCI credentials directory (read-only)
+      - ~/.oci:/root/.oci:ro
     # Uncomment to run specific command
-    # command: upload-dir --local-path /app/uploads --blob-prefix photos
+    # command: upload-dir --local-path /app/uploads --object-prefix photos
     stdin_open: true
     tty: true
